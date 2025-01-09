@@ -1,0 +1,42 @@
+Acest proiect implementează un program în limbajul C++ care utilizează paradigma Map-Reduce pentru procesarea mai multor fișiere de intrare și construirea unui index inversat. Acest index conține o listă de toate cuvintele distincte din fișierele de intrare, împreună cu identificatorii fișierelor în care acestea apar.
+
+Am ales să folosesc clasele deoarece așa sunt obișnuit să lucrez în C++, de ce sa nu profit :))))
+
+Funcționalități
+
+Procesarea fișierelor de intrare:
+
+Mapperii parcurg fișierele și extrag cuvintele  și apoi le normalizează. 
+
+Agregarea rezultatelor:
+
+Reducerii combină rezultatele mapperilor și creează liste de cuvinte împreună cu fișierele în care apar.
+
+Sortarea și salvarea rezultatelor:
+
+Cuvintele sunt sortate descrescător după numărul de fișiere în care apar, iar în caz de egalitate, sunt sortate alfabetic.
+Rezultatele sunt salvate în fișiere separate, câte unul pentru fiecare literă a alfabetului.
+
+Cum Am Gândit Rezolvarea
+
+1. Organizarea în Clase
+Am utilizat clase pentru a împărți logica aplicației în module:
+
+WordProcessor: Normalizează cuvintele, verificând dacă sunt litere și transformându-le în litere mici.
+SortingUtility: Responsabil pentru sortarea și salvarea rezultatelor.
+Mapper: Parcurge fișierele, normalizează cuvintele și creează rezultate parțiale.
+Reducer: Agregă rezultatele mapperilor și creează fișierele finale sortate.
+QueueManager: Asigură sincronizarea accesului la coada de fișiere utilizată de mapperi.
+TaskManager: Coordonatorul principal care gestionează mapperii și reducerii.
+
+2. Paradigma Map-Reduce
+Am implementat paradigma Map-Reduce pentru a asigura paralelizarea sarcinilor:
+
+Mapperi: Fiecare mapper este un thread care procesează fișiere dintr-o coadă comună.
+Reducerii: Fiecare reducer este un thread care procesează o gamă specifică de litere ale alfabetului.
+
+3. Sincronizare
+Am utilizat mecanisme de sincronizare pentru a preveni accesul concurent la resurse:
+
+pthread_mutex_t: Protejează coada de fișiere partajată.
+pthread_create și pthread_join: Folosite pentru crearea și gestionarea threadurilor

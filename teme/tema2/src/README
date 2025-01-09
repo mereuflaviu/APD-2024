@@ -1,0 +1,170 @@
+        -- Tema 2 - APD - Mereu Ioan Flaviu - 342C3  --
+
+Descriere:
+
+Această temă implementează un sistem de tip BitTorrent pentru simularea procesului de încărcare și descărcare de fișiere, utilizând biblioteca MPI pentru comunicare distribuită și pthread pentru gestionarea operațiilor multi-thread. Programul a fost structurat în două componente principale:
+
+- Tracker: centralizează informațiile despre swarm-uri și gestionează comunicarea cu clienții.
+- Peers (Clienți): descarcă și încarcă segmente de fișiere într-un mod distribuit.
+
+Punctaj obținut:
+
+Soluția implementată obține punctajul maxim pe checker.
+
+--------------------------------------- Cursivitatea codului -----------------------------------------------
+
+Fluxul de execuție este următorul:
+
+1) Inițializare (main()):
+
+- Programul pornește prin inițializarea mediului MPI, iar numărul de task-uri și rank-urile acestora sunt determinate.
+- Dacă rank-ul curent este 0, acesta devine tracker (tracker()); în caz contrar, rank-ul devine un client (peer()).
+
+2) Tracker (tracker()):
+
+- Faza inițială: primește informații despre fișierele deținute de la toți clienții (handleClientUpdate()), construiește lista globală de swarm-uri și trimite mesaje ACK.
+- Rulare continuă:
+
+    Așteaptă cereri de swarm de la clienți (TAG_SWARM_REQ).
+
+    Procesează actualizările clienților despre progresul descărcării lor (TAG_UPDATE).
+
+    Înregistrează terminarea descărcării fiecărui client (TAG_DONE).
+
+- Finalizare: notifică toți clienții să-și oprească thread-urile prin mesajele TERMINATION.
+
+3) Client (peer()):
+
+- Citește fișierele proprii și cele dorite din fișierul de intrare (loadPeerDataFromFile()).
+
+- Creează două thread-uri:
+
+    Download (download_thread_func()):
+
+        Trimite informații inițiale despre fișiere către tracker (sendClientFilesToTracker()).
+        Solicită swarm-ul pentru fișierele dorite (askTrackerForSwarm()).
+        Caută segmente lipsă, le descarcă de la peers utilizând requestSegmentFromPeer(), și salvează fișierele descărcate (saveDownloadedFile()).
+        Trimite periodic update-uri către tracker.
+        Notifică tracker-ul la finalizare (TAG_DONE).
+    
+    Upload (upload_thread_func()):
+
+        Răspunde cererilor altor clienți pentru segmente (TAG_SEG_REQ).
+        Se oprește la primirea mesajului TERMINATION.
+
+-------------------------------------------- Tracker -------------------------------------------------------
+
+
+Tracker-ul funcționează astfel:
+
+- Colectare informații inițiale:
+
+    Primește de la fiecare client informații despre fișierele deținute, împreună cu segmentele asociate (handleClientUpdate()).
+    Creează o listă centralizată a fișierelor și swarm-urilor asociate.
+    Trimite fiecărui client un mesaj ACK pentru a semnala că poate începe descărcarea.
+
+- Gestionare swarm-uri:
+
+    Răspunde cererilor de swarm (TAG_SWARM_REQ) trimise de clienți, trimițând lista actualizată a swarm-ului asociat unui fișier (handleSwarmRequest()).
+
+- Monitorizare progres clienți:
+
+    Primește notificări de la clienți prin mesajele TAG_DONE când aceștia termină descărcarea.
+    Închide execuția când toți clienții și-au finalizat descărcările.
+
+- Notificare de terminare:
+
+    După ce toți clienții își încheie descărcările, tracker-ul trimite un mesaj de terminare (TERMINATION) tuturor thread-urilor de upload.
+
+----------------------------------------- Peer (Client) ----------------------------------------------------
+
+Clienții funcționează astfel:
+
+- Inițializare:
+
+    Citește fișierele proprii și cele dorite din fișierele de intrare (loadPeerDataFromFile()).
+    Trimite tracker-ului informații despre fișierele deținute și segmentele asociate (sendClientFilesToTracker()).
+
+- Download (download_thread_func()):
+
+    Solicită tracker-ului swarm-ul asociat fișierelor dorite (askTrackerForSwarm()).
+    Identifică segmentele lipsă utilizând pickMissingSegmentIndex().
+    Alege random un peer care deține segmentul dorit (chooseRandomSeeder()) și cere segmentul (requestSegmentFromPeer()).
+    După descărcarea a 10 segmente, trimite un update către tracker.
+    Salvează fișierele descărcate local (saveDownloadedFile()).
+    Notifică tracker-ul la finalizarea descărcării tuturor fișierelor dorite (TAG_DONE).
+
+- Upload (upload_thread_func()):
+
+    Ascultă cererile de segmente de la alți clienți (TAG_SEG_REQ).
+    Trimite hash-urile segmentelor cerute.
+    Se oprește la primirea mesajului de terminare (TERMINATION).
+
+----------------------------------------- Structuri de date ------------------------------------------------
+
+1. SegmentInfo (pentru segmente individuale):
+
+bool owned: indică dacă segmentul este deținut de client.
+std::string segmentHash: hash-ul segmentului.
+
+2. SwarmPeer (pentru peer-ii unui fișier):
+
+int peerRank: rank-ul peer-ului în sistem.
+std::vector<int> hasSegment: indică segmentele deținute de peer.
+
+3. TorrentFile (pentru fișierele gestionate de clienți):
+
+std::string fileName: numele fișierului.
+int totalSegments: numărul total de segmente ale fișierului.
+int ownedCount: numărul de segmente deținute.
+std::vector<SegmentInfo> segments: lista segmentelor fișierului.
+std::vector<SwarmPeer> swarm: lista peer-ilor din swarm.
+
+4. GlobalFile (pentru tracker):
+
+Similar cu TorrentFile, dar folosit pentru gestionarea centralizată a fișierelor și swarm-urilor.
+
+----------------------------------------- Funcții principale -----------------------------------------------
+
+1) Tracker:
+
+tracker(): gestionează cererile de swarm, update-urile și finalizarea descărcărilor.
+handleSwarmRequest(): trimite swarm-ul unui fișier la cererea unui client.
+handleClientUpdate(): actualizează swarm-urile pe baza informațiilor primite de la clienți.
+
+2) Client:
+
+loadPeerDataFromFile(): citește fișierele deținute și dorite din fișierul de intrare.
+download_thread_func(): implementează logica de descărcare a segmentelor.
+upload_thread_func(): răspunde cererilor de segmente de la alți clienți.
+pickMissingSegmentIndex(): identifică primul segment lipsă dintr-un fișier.
+chooseRandomSeeder(): alege un peer random din swarm pentru a descărca un segment.
+saveDownloadedFile(): salvează un fișier descărcat local.
+
+----------------------------------------- Observații -----------------------------------------------
+
+
+Eficiență:
+
+Alegerea random a seeder-ului pentru descărcarea segmentelor (chooseRandomSeeder()) distribuie uniform încărcarea între peers.
+Actualizarea periodică a swarm-ului permite includerea clienților noi care devin disponibili.
+
+Limitări:
+
+În anumite scenarii, actualizarea swarm-ului poate genera blocaje din cauza concurenței pentru selecția peer-ului.
+
+
+----------------------------------------- Structura fișierelor ---------------------------------------------
+
+Fișier de intrare (in<R>.txt):
+
+    Conține lista fișierelor deținute și dorite de client.
+    Hash-urile segmentelor sunt folosite pentru verificarea integrității.
+
+Fișier de ieșire (client<R>_<NUME_FISIER>):
+
+Conține hash-urile segmentelor descărcate, salvate în ordine.
+
+--------------------------------------------- Concluzii ----------------------------------------------------
+
+Această implementare simulează eficient un sistem de tip BitTorrent, demonstrând cum clienții colaborează pentru a partaja și descărca fișiere într-o rețea distribuită. Utilizarea MPI și pthread a permis obținerea unei soluții eficiente și robuste, cu punctaj maxim pe checker. Codul este clar structurat, ceea ce facilitează înțelegerea și extinderea acestuia pentru scenarii mai complexe.
